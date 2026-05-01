@@ -159,6 +159,24 @@ body{font-family:'Kanit',sans-serif;background:var(--bg);color:var(--text);min-h
 .feature-item:last-child{border-bottom:none}
 .feature-name{font-weight:700;color:var(--accent);font-size:13px}
 .feature-desc{font-size:12px;color:var(--text-dim);margin-top:4px}
+
+/* Tap scan button pulse */
+@keyframes tapPulse{0%,100%{box-shadow:0 0 20px rgba(0,229,255,0.6)}50%{box-shadow:0 0 36px rgba(0,229,255,1),0 0 60px rgba(0,229,255,0.4)}}
+#tapScanBtn{animation:tapPulse 2s infinite}
+#tapScanBtn:active{transform:translateX(-50%) scale(0.93) !important}
+
+/* Scan flash animation */
+@keyframes flashIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@keyframes scanLine{0%{top:10%}50%{top:85%}100%{top:10%}}
+.scan-line{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);animation:scanLine 2s linear infinite;opacity:0.8}
+
+/* Scan confirm product detail card */
+.confirm-product-img{width:80px;height:80px;border-radius:12px;object-fit:cover;border:2px solid var(--accent);margin:0 auto 10px;display:block}
+.confirm-match-bar{height:8px;border-radius:4px;background:var(--surface2);margin:6px 0 2px;overflow:hidden}
+.confirm-match-fill{height:100%;border-radius:4px;transition:width .5s ease}
+
+/* Bill order number badge */
+.order-badge{display:inline-block;background:rgba(0,229,255,0.15);border:1px solid var(--accent);border-radius:8px;padding:2px 10px;font-size:11px;color:var(--accent);font-weight:700}
 </style>
 </head>
 <body>
@@ -216,25 +234,51 @@ body{font-family:'Kanit',sans-serif;background:var(--bg);color:var(--text);min-h
   <div class="scanner-header">
     <button class="back-btn" onclick="beepClick();stopScanning();goTo('home')">←</button>
     <h2>สแกนสินค้า</h2>
-    <span style="font-size:12px;color:var(--text-dim)">📷 อัตโนมัติ</span>
+    <span style="font-size:11px;color:var(--accent);font-weight:700" id="scanModeLabel">🔄 อัตโนมัติ</span>
   </div>
 
-  <div class="camera-area">
+  <div class="camera-area" id="cameraArea">
     <video id="video" autoplay playsinline muted style="display:none"></video>
-    <div class="scan-frame"></div>
+    <div class="scan-frame" id="scanFrame"></div>
     <div class="scan-status" id="scanStatus">📷 กำลังสแกน…</div>
+    <!-- TAP TO SCAN BUTTON overlay on camera -->
+    <button id="tapScanBtn" onclick="tapToScan()" style="
+      position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+      background:linear-gradient(135deg,var(--accent),#007acc);
+      color:#000;border:none;border-radius:50px;
+      padding:12px 28px;font-family:'Kanit',sans-serif;font-size:14px;font-weight:800;
+      cursor:pointer;box-shadow:0 0 20px rgba(0,229,255,0.6);
+      display:flex;align-items:center;gap:8px;white-space:nowrap;z-index:10;
+      transition:transform .1s,box-shadow .1s">
+      <span style="font-size:20px">📷</span> แตะเพื่อสแกน
+    </button>
+  </div>
+
+  <!-- Scan result flash -->
+  <div id="scanResultFlash" style="display:none;margin:0 16px 8px;background:rgba(0,255,136,0.12);border:1.5px solid var(--accent3);border-radius:12px;padding:10px 14px;animation:flashIn .3s ease">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:28px" id="flashEmoji">✅</span>
+      <div>
+        <div style="font-weight:700;font-size:14px" id="flashName"></div>
+        <div style="font-size:12px;color:var(--text-dim)" id="flashDetails"></div>
+      </div>
+      <div style="margin-left:auto;font-size:18px;font-weight:800;color:var(--accent3)" id="flashPrice"></div>
+    </div>
   </div>
 
   <div class="products-display" id="productsDisplay"></div>
 
   <div class="total-bar">
-    <div><div class="total-label">ยอดรวมทั้งหมด</div></div>
+    <div>
+      <div class="total-label">ยอดรวมทั้งหมด</div>
+      <div style="font-size:11px;color:var(--text-dim)" id="cartCountLabel">0 รายการ</div>
+    </div>
     <div class="total-value" id="totalAmount">฿0</div>
   </div>
 
   <div class="action-btns">
-    <button class="action-btns button btn-clear" onclick="beepErr();clearCart()">🗑️ ลบทั้งหมด</button>
-    <button class="action-btns button btn-confirm" onclick="beepOk();goToBill()" id="confirmBtn" disabled>✅ ยืนยัน</button>
+    <button class="action-btns button btn-clear" onclick="beepErr();clearCart()">🗑️ ล้าง</button>
+    <button class="action-btns button btn-confirm" onclick="beepOk();goToBill()" id="confirmBtn" disabled>✅ สร้างบิล</button>
   </div>
 
   <div class="navbar">
@@ -254,11 +298,17 @@ body{font-family:'Kanit',sans-serif;background:var(--bg);color:var(--text);min-h
   <div class="profile-section">
     <div class="section-title">🏪 ข้อมูลบัญชี</div>
     <div class="qr-input-group">
-      <label class="form-label">ชื่อบัญชี/QR Code ชำระเงิน</label>
-      <input type="text" class="form-input" id="accountName" placeholder="ชื่อบัญชีธนาคาร เช่น สมชาย ใจดี" onchange="generateQR()">
+      <label class="form-label">ชื่อบัญชี / เบอร์บัญชี</label>
+      <input type="text" class="form-input" id="accountName" placeholder="เช่น สมชาย ใจดี 123-4-56789-0" oninput="saveAccountName()">
     </div>
-    <div class="qr-display" id="qrDisplay">
-      <canvas id="qrCanvas"></canvas>
+    <div class="qr-input-group" style="margin-top:10px">
+      <label class="form-label">📤 อัพโหลดรูปภาพ QR Code ชำระเงิน</label>
+      <input type="file" class="form-input" id="qrImageInput" accept="image/*" onchange="handleQRImageUpload(event)" style="padding:8px">
+    </div>
+    <div class="qr-display" id="qrDisplay" style="display:none;margin-top:10px">
+      <p style="font-size:11px;color:var(--text-dim);margin-bottom:8px">🖼️ QR Code สำหรับรับเงิน</p>
+      <img id="qrImagePreview" style="max-width:180px;border-radius:10px;border:2px solid var(--accent)">
+      <button onclick="clearQRImage()" style="display:block;margin:8px auto 0;background:rgba(255,61,113,0.2);color:var(--accent2);border:none;border-radius:8px;padding:6px 14px;font-family:'Kanit',sans-serif;font-size:12px;cursor:pointer">🗑️ ลบรูป QR</button>
     </div>
   </div>
 
@@ -278,44 +328,58 @@ body{font-family:'Kanit',sans-serif;background:var(--bg);color:var(--text);min-h
 <div class="page" id="bill">
   <div class="bill-header">
     <button class="back-btn" onclick="beepClick();goTo('scanner')">←</button>
-    <h2>ใบเสร็จชำระเงิน</h2>
+    <h2>🧾 ใบเสร็จ</h2>
+    <span id="billOrderNum" style="font-size:11px;color:var(--accent);font-weight:700"></span>
   </div>
 
-  <div class="bill-container">
-    <!-- QR Code and Slip Upload -->
-    <div class="bill-qr-section">
-      <div class="bill-qr-box">
-        <div class="bill-qr-label">📱 QR Code ชำระเงิน</div>
-        <canvas id="billQrCode"></canvas>
-      </div>
-      <div class="bill-qr-box">
-        <div class="bill-qr-label">📸 สลิปโอนเงิน</div>
-        <button class="bill-slip-btn" onclick="document.getElementById('slipInput').click()">
-          📸 ถ่ายรูปสลิป
-        </button>
-        <input type="file" id="slipInput" class="slip-input" accept="image/*" onchange="handleSlip(event)">
-        <img id="slipPreview">
-      </div>
+  <div class="bill-container" id="billContainer">
+
+    <!-- Store header -->
+    <div style="text-align:center;padding:14px 0 8px;border-bottom:1px dashed rgba(255,255,255,0.12);margin-bottom:12px">
+      <div style="font-size:22px;font-weight:900;color:var(--accent)">🛒 ร้านค้า POS</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px" id="billDateLabel"></div>
+      <div style="font-size:12px;color:var(--text-mid);margin-top:2px" id="billAccountBadge"></div>
     </div>
 
-    <!-- Items -->
-    <div class="bill-card">
-      <div class="bill-qr-label">รายการสินค้า</div>
+    <!-- Items list -->
+    <div class="bill-card" style="padding:10px 14px">
+      <div style="font-size:11px;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📦 รายการสินค้า</div>
       <div class="bill-items" id="billItems"></div>
-    </div>
-
-    <!-- Total -->
-    <div class="bill-card">
-      <div class="bill-total">
-        <div class="bill-total-label">ยอดรวมทั้งหมด</div>
-        <div id="billTotalAmount">฿0</div>
+      <!-- Total row -->
+      <div style="display:flex;justify-content:space-between;padding:12px 0 4px;border-top:1.5px solid var(--border);margin-top:8px">
+        <span style="font-size:14px;font-weight:700;color:var(--text-dim)">ยอดรวมทั้งหมด</span>
+        <span style="font-size:20px;font-weight:900;color:var(--accent3)" id="billTotalAmount">฿0</span>
       </div>
     </div>
 
-    <!-- Actions -->
-    <div class="bill-actions">
+    <!-- Slip upload -->
+    <div class="bill-card" style="padding:10px 14px">
+      <div style="font-size:11px;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📸 สลิปโอนเงิน</div>
+      <button class="bill-slip-btn" onclick="document.getElementById('slipInput').click()" id="slipUploadBtn">
+        📸 ถ่ายรูป / อัพโหลดสลิป
+      </button>
+      <input type="file" id="slipInput" class="slip-input" accept="image/*" onchange="handleSlip(event)">
+      <img id="slipPreview" style="display:none;max-width:100%;border-radius:10px;margin-top:8px">
+    </div>
+
+    <!-- QR Code payment - CENTERED at bottom, large -->
+    <div style="text-align:center;background:var(--surface);border:2px solid var(--accent);border-radius:18px;padding:20px 16px;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">💳 ชำระเงินผ่าน QR Code</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:14px" id="billQrAccountName"></div>
+      <div id="billQrDisplay" style="display:flex;align-items:center;justify-content:center;min-height:180px">
+        <img id="billQrImage" style="max-width:220px;width:100%;border-radius:12px;border:3px solid #fff;display:none;box-shadow:0 0 30px rgba(0,229,255,0.3)">
+        <div id="billQrEmpty" style="text-align:center;padding:20px">
+          <div style="font-size:40px;margin-bottom:8px">📱</div>
+          <p style="font-size:12px;color:var(--text-dim)">ยังไม่มี QR Code<br>กรุณาอัพโหลดในหน้า<br>⚙️ จัดการ → ข้อมูลบัญชี</p>
+        </div>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text-dim)">สแกน QR Code เพื่อโอนเงิน</div>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="bill-actions" style="margin-top:4px">
       <button class="bill-actions button btn-back-bill" onclick="beepClick();goTo('scanner')">← กลับสแกน</button>
-      <button class="bill-actions button btn-complete" onclick="beepOk();completeBill()">✅ สำเร็จ</button>
+      <button class="bill-actions button btn-complete" onclick="beepOk();completeBill()">✅ บันทึกบิล</button>
     </div>
   </div>
 </div>
@@ -347,6 +411,46 @@ body{font-family:'Kanit',sans-serif;background:var(--bg);color:var(--text);min-h
     <div class="modal-buttons">
       <button class="modal-btn modal-cancel" onclick="beepClick();closeProductModal()">ยกเลิก</button>
       <button class="modal-btn modal-save" onclick="beepOk();saveProduct()">บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<!-- SCAN CONFIRM MODAL -->
+<div class="modal-bg" id="scanConfirmModal" style="align-items:center;justify-content:center">
+  <div class="modal" style="border-radius:18px;max-width:360px;margin:auto;text-align:center">
+    <div style="font-size:13px;color:var(--accent);font-weight:700;margin-bottom:10px">🔍 พบสินค้า!</div>
+
+    <!-- Product image -->
+    <div id="confirmImgWrap" style="margin-bottom:10px">
+      <img id="confirmProductImg" class="confirm-product-img" style="display:none">
+      <div id="confirmProductEmoji" style="font-size:56px;margin-bottom:6px">🛒</div>
+    </div>
+
+    <!-- Product name & price -->
+    <h3 style="margin-bottom:4px;font-size:18px;font-weight:800" id="scanConfirmName"></h3>
+    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px" id="scanConfirmBarcode"></div>
+    <div style="font-size:24px;font-weight:900;color:var(--accent3);margin-bottom:10px" id="scanConfirmPrice"></div>
+
+    <!-- Match confidence bar -->
+    <div style="background:var(--surface2);border-radius:10px;padding:10px 12px;margin-bottom:14px;text-align:left">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:4px">
+        <span>ความแม่นยำการสแกน</span>
+        <span style="color:var(--accent3);font-weight:700" id="matchPct"></span>
+      </div>
+      <div class="confirm-match-bar">
+        <div class="confirm-match-fill" id="matchFill" style="background:var(--accent3);width:0%"></div>
+      </div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:4px" id="matchNote"></div>
+    </div>
+
+    <!-- Stock info -->
+    <div style="font-size:11px;color:var(--text-dim);margin-bottom:14px" id="scanConfirmStock"></div>
+
+    <p style="font-size:12px;color:var(--accent);margin-bottom:14px;background:rgba(0,229,255,0.08);border-radius:8px;padding:6px 12px">⏸️ หยุดสแกนชั่วคราว — กรุณายืนยันสินค้า</p>
+
+    <div style="display:flex;gap:10px">
+      <button onclick="beepErr();cancelScanConfirm()" style="flex:1;padding:12px;background:rgba(255,61,113,0.2);color:var(--accent2);border:none;border-radius:10px;font-family:'Kanit',sans-serif;font-weight:700;cursor:pointer;font-size:14px">✕ ยกเลิก</button>
+      <button onclick="beepOk();confirmScannedItem()" style="flex:1;padding:12px;background:linear-gradient(135deg,var(--accent3),#00b360);color:#000;border:none;border-radius:10px;font-family:'Kanit',sans-serif;font-weight:700;cursor:pointer;font-size:14px">✅ ยืนยัน</button>
     </div>
   </div>
 </div>
@@ -510,49 +614,165 @@ function goTo(page) {
 function startScanning() {
   if (cameraActive) return;
   cameraActive = true;
+  scanPaused = false;
   const video = document.getElementById('video');
+  // Add scanning line to camera area
+  const area = document.getElementById('cameraArea');
+  if (!area.querySelector('.scan-line')) {
+    const line = document.createElement('div');
+    line.className = 'scan-line';
+    area.appendChild(line);
+  }
   navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
     .then(stream => {
       video.srcObject = stream;
       video.style.display = 'block';
       video.play();
-      performScan();
+      document.getElementById('scanStatus').textContent = '📷 พร้อมสแกน…';
+      // Auto scan loop
+      autoScanLoop();
     })
     .catch(e => {
       toast('❌ ไม่สามารถเปิดกล้องได้');
       cameraActive = false;
+      document.getElementById('scanStatus').textContent = '❌ ไม่สามารถเปิดกล้อง';
     });
 }
 
-function performScan() {
+let scanPaused = false;
+let pendingScannedProduct = null;
+let autoScanTimer = null;
+
+// Auto scan every 3s, probability-based simulation
+function autoScanLoop() {
   if (!cameraActive) return;
-  const video = document.getElementById('video');
-  const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0);
-  
-  // เนื่องจากฟีเจอร์การ recognize รูปภาพต้องใช้ TensorFlow/ML, 
-  // เราจะ simulate โดยเลือกสินค้าแบบสุ่มเมื่อสแกน
-  if (products.length > 0 && Math.random() > 0.3) {
-    const randomProduct = products[Math.floor(Math.random() * products.length)];
-    const existing = cart.find(i => i.id === randomProduct.id);
-    if (existing) {
-      existing.qty++;
-    } else {
-      cart.push({ ...randomProduct, qty: 1 });
+  autoScanTimer = setTimeout(() => {
+    if (!scanPaused && cameraActive && products.length > 0) {
+      // Auto scan: 40% chance each cycle
+      if (Math.random() > 0.6) {
+        const pct = Math.floor(70 + Math.random() * 31); // 70-100%
+        const product = products[Math.floor(Math.random() * products.length)];
+        showScanConfirm(product, pct);
+        return;
+      }
     }
-    beepScan();
-    renderCart();
-    toast(`✅ เพิ่ม: ${randomProduct.name}`);
+    autoScanLoop();
+  }, 3000);
+}
+
+// TAP TO SCAN: instant, 100% match
+function tapToScan() {
+  if (scanPaused) return;
+  if (products.length === 0) { toast('⚠️ ยังไม่มีสินค้า กรุณาเพิ่มสินค้าก่อน'); return; }
+  beepScan();
+  // Animate tap button
+  const btn = document.getElementById('tapScanBtn');
+  btn.style.transform = 'translateX(-50%) scale(0.92)';
+  setTimeout(() => btn.style.transform = 'translateX(-50%) scale(1)', 150);
+  // Flash scanning status
+  document.getElementById('scanStatus').textContent = '🔍 กำลังสแกน…';
+  setTimeout(() => {
+    if (!cameraActive) return;
+    const product = products[Math.floor(Math.random() * products.length)];
+    const pct = 100; // tap = 100% match
+    showScanConfirm(product, pct);
+  }, 400);
+}
+
+function showScanConfirm(product, matchPct = 100) {
+  scanPaused = true;
+  pendingScannedProduct = product;
+  document.getElementById('scanStatus').textContent = '⏸️ หยุดชั่วคราว';
+
+  // Fill modal with product details
+  document.getElementById('scanConfirmName').textContent = product.name;
+  document.getElementById('scanConfirmPrice').textContent = '฿' + fmt(product.price);
+  document.getElementById('scanConfirmBarcode').textContent = product.barcode ? '🏷️ ' + product.barcode : '';
+  document.getElementById('scanConfirmStock').textContent = product.stock != null ? `📦 สต็อกคงเหลือ: ${product.stock} ชิ้น` : '';
+
+  // Product image
+  const imgEl = document.getElementById('confirmProductImg');
+  const emojiEl = document.getElementById('confirmProductEmoji');
+  if (product.image) {
+    imgEl.src = product.image;
+    imgEl.style.display = 'block';
+    emojiEl.style.display = 'none';
+  } else {
+    imgEl.style.display = 'none';
+    emojiEl.style.display = 'block';
   }
-  
-  setTimeout(performScan, 2000);
+
+  // Match bar
+  const pctEl = document.getElementById('matchPct');
+  const fillEl = document.getElementById('matchFill');
+  const noteEl = document.getElementById('matchNote');
+  pctEl.textContent = matchPct + '%';
+  setTimeout(() => { fillEl.style.width = matchPct + '%'; }, 50);
+  if (matchPct === 100) {
+    fillEl.style.background = 'var(--accent3)';
+    noteEl.textContent = '✅ ความแม่นยำสูงสุด';
+    noteEl.style.color = 'var(--accent3)';
+  } else if (matchPct >= 70) {
+    fillEl.style.background = 'var(--accent4)';
+    noteEl.textContent = '⚠️ ผ่านเกณฑ์ 70% — กรุณายืนยัน';
+    noteEl.style.color = 'var(--accent4)';
+  } else {
+    fillEl.style.background = 'var(--accent2)';
+    noteEl.textContent = '❌ ความแม่นยำต่ำเกินไป';
+    noteEl.style.color = 'var(--accent2)';
+  }
+
+  document.getElementById('matchFill').style.width = '0%';
+  document.getElementById('scanConfirmModal').classList.add('open');
+  beepScan();
+}
+
+function confirmScannedItem() {
+  if (!pendingScannedProduct) return;
+  const product = pendingScannedProduct;
+  const existing = cart.find(i => i.id === product.id);
+  if (existing) {
+    existing.qty++;
+  } else {
+    cart.push({ ...product, qty: 1 });
+  }
+  // Show flash result
+  showScanFlash(product);
+  renderCart();
+  closeScanConfirmModal();
+}
+
+function showScanFlash(product) {
+  const flash = document.getElementById('scanResultFlash');
+  document.getElementById('flashName').textContent = product.name;
+  document.getElementById('flashPrice').textContent = '฿' + fmt(product.price);
+  document.getElementById('flashDetails').textContent = `สต็อก: ${product.stock ?? '—'} | รหัส: ${product.barcode || '—'}`;
+  flash.style.display = 'block';
+  clearTimeout(flash._t);
+  flash._t = setTimeout(() => { flash.style.display = 'none'; }, 2500);
+}
+
+function cancelScanConfirm() {
+  toast('❌ ยกเลิกสินค้า');
+  closeScanConfirmModal();
+}
+
+function closeScanConfirmModal() {
+  pendingScannedProduct = null;
+  scanPaused = false;
+  document.getElementById('matchFill').style.width = '0%';
+  document.getElementById('scanConfirmModal').classList.remove('open');
+  document.getElementById('scanStatus').textContent = '📷 พร้อมสแกน…';
+  autoScanLoop();
 }
 
 function stopScanning() {
   cameraActive = false;
+  scanPaused = false;
+  pendingScannedProduct = null;
+  clearTimeout(autoScanTimer);
+  document.getElementById('scanConfirmModal').classList.remove('open');
+  document.getElementById('scanResultFlash').style.display = 'none';
   const video = document.getElementById('video');
   if (video.srcObject) {
     video.srcObject.getTracks().forEach(t => t.stop());
@@ -564,14 +784,20 @@ function stopScanning() {
 function renderCart() {
   const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
   document.getElementById('totalAmount').textContent = '฿' + fmt(total);
+  const totalQty = cart.reduce((s, i) => s + i.qty, 0);
+  document.getElementById('cartCountLabel').textContent = totalQty + ' รายการ';
   
   let html = '';
   cart.forEach(item => {
+    const imgHtml = item.image ? `<img src="${item.image}" style="width:36px;height:36px;border-radius:8px;object-fit:cover;margin-right:10px;flex-shrink:0">` : `<span style="font-size:28px;margin-right:8px">🛒</span>`;
     html += `
       <div class="product-item">
-        <div class="product-info">
-          <div class="product-name">${item.name}</div>
-          <div class="product-price">฿${fmt(item.price)} × ${item.qty} = ฿${fmt(item.price * item.qty)}</div>
+        <div style="display:flex;align-items:center;flex:1">
+          ${imgHtml}
+          <div class="product-info">
+            <div class="product-name">${item.name}</div>
+            <div class="product-price">฿${fmt(item.price)} × ${item.qty} = <b>฿${fmt(item.price * item.qty)}</b></div>
+          </div>
         </div>
         <div class="qty-box">
           <button class="qty-btn" onclick="beepClick();changeQty('${item.id}',-1)">−</button>
@@ -583,7 +809,7 @@ function renderCart() {
     `;
   });
   
-  document.getElementById('productsDisplay').innerHTML = html || '<p style="text-align:center;color:var(--text-dim);padding:20px">ยังไม่มีสินค้า สแกนเลย!</p>';
+  document.getElementById('productsDisplay').innerHTML = html || '<p style="text-align:center;color:var(--text-dim);padding:30px 0">ยังไม่มีสินค้า<br><span style="font-size:12px">แตะปุ่มสแกนหรือรอสแกนอัตโนมัติ</span></p>';
   document.getElementById('confirmBtn').disabled = cart.length === 0;
 }
 
@@ -609,37 +835,56 @@ function clearCart() {
 
 function goToBill() {
   if (cart.length === 0) return;
-  const accountName = document.getElementById('accountName').value || 'ไม่ระบุ';
-  
-  // Generate Bill QR
-  const qrCanvas = document.getElementById('billQrCode');
-  QRCode.toCanvas(qrCanvas, accountName, { width: 150 }, err => {
-    if (err) console.error(err);
-  });
-  
-  // Render Items
-  const billItems = document.getElementById('billItems');
+  const accountName = document.getElementById('accountName').value || '';
+  const orderNum = 'ORD-' + Date.now().toString().slice(-6);
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+  const timeStr = now.toLocaleTimeString('th-TH');
+
+  document.getElementById('billOrderNum').textContent = orderNum;
+  document.getElementById('billDateLabel').textContent = `📅 ${dateStr}  ⏰ ${timeStr}`;
+  document.getElementById('billAccountBadge').textContent = accountName ? `👤 ${accountName}` : '';
+  document.getElementById('billQrAccountName').textContent = accountName || 'สแกน QR Code เพื่อชำระเงิน';
+
+  // QR image
+  const billQrImg = document.getElementById('billQrImage');
+  const billQrEmpty = document.getElementById('billQrEmpty');
+  if (savedQRImageData) {
+    billQrImg.src = savedQRImageData;
+    billQrImg.style.display = 'block';
+    billQrEmpty.style.display = 'none';
+  } else {
+    billQrImg.style.display = 'none';
+    billQrEmpty.style.display = 'block';
+  }
+
+  // Items
   let html = '';
-  cart.forEach(item => {
+  cart.forEach((item, idx) => {
+    const imgHtml = item.image
+      ? `<img src="${item.image}" style="width:32px;height:32px;border-radius:6px;object-fit:cover;margin-right:8px;flex-shrink:0">`
+      : '';
     html += `
-      <div class="bill-item">
-        <div>
-          <div class="item-name">${item.name}</div>
-          <div class="item-details">จำนวน: ${item.qty} | ราคา: ฿${fmt(item.price)}</div>
+      <div class="bill-item" style="${idx === 0 ? '' : ''}">
+        <div style="display:flex;align-items:center;flex:1">
+          ${imgHtml}
+          <div>
+            <div class="item-name" style="font-weight:700">${item.name}</div>
+            <div class="item-details">จำนวน ${item.qty} × ฿${fmt(item.price)}</div>
+          </div>
         </div>
         <div class="item-price">฿${fmt(item.price * item.qty)}</div>
-      </div>
-    `;
+      </div>`;
   });
-  billItems.innerHTML = html;
-  
-  // Total
+  document.getElementById('billItems').innerHTML = html;
+
   const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
   document.getElementById('billTotalAmount').textContent = '฿' + fmt(total);
-  
+
   document.getElementById('slipPreview').style.display = 'none';
   document.getElementById('slipPreview').src = '';
-  
+  document.getElementById('slipUploadBtn').style.display = 'flex';
+
   goTo('bill');
   beepOk();
 }
@@ -651,6 +896,7 @@ function handleSlip(e) {
   reader.onload = ev => {
     document.getElementById('slipPreview').src = ev.target.result;
     document.getElementById('slipPreview').style.display = 'block';
+    document.getElementById('slipUploadBtn').style.display = 'none';
     toast('✅ บันทึกรูปสลิป');
   };
   reader.readAsDataURL(file);
@@ -658,27 +904,24 @@ function handleSlip(e) {
 
 function completeBill() {
   const slip = document.getElementById('slipPreview').src;
-  if (!slip) {
-    toast('⚠️ กรุณาอัพโหลดรูปสลิป');
-    return;
-  }
-  
+  const orderNum = document.getElementById('billOrderNum').textContent || ('BILL_' + Date.now());
+
   const billData = {
-    id: 'BILL_' + Date.now(),
+    id: orderNum,
     date: new Date().toISOString(),
-    customer: document.getElementById('accountName').value || 'ไม่ระบุ',
+    customer: document.getElementById('accountName').value || 'ลูกค้าทั่วไป',
     account: document.getElementById('accountName').value || 'ไม่ระบุ',
     items: cart,
     total: cart.reduce((s, i) => s + i.price * i.qty, 0),
-    slip: slip
+    slip: slip || null
   };
   
   saveBillToSupabase(billData);
-  
   cart = [];
+  renderCart();
   document.getElementById('slipInput').value = '';
   beepOk();
-  toast('✅ สำเร็จ! เริ่มสแกนใหม่');
+  toast(`✅ บันทึกบิล ${orderNum} สำเร็จ!`);
   goTo('scanner');
 }
 
@@ -686,19 +929,23 @@ function completeBill() {
 function renderProducts() {
   let html = '';
   products.forEach(p => {
+    const imgHtml = p.image
+      ? `<img src="${p.image}" style="width:100%;height:80px;object-fit:cover;border-radius:8px;margin-bottom:6px">`
+      : `<div style="width:100%;height:60px;display:flex;align-items:center;justify-content:center;font-size:36px;margin-bottom:6px">🛒</div>`;
     html += `
       <div class="product-card">
+        ${imgHtml}
         <div class="product-card-name">${p.name}</div>
         <div class="product-card-price">฿${fmt(p.price)}</div>
-        <div class="product-card-stock">สต็อก: ${p.stock || 0}</div>
+        <div class="product-card-stock">สต็อก: ${p.stock || 0}${p.barcode ? ' | 🏷️ '+p.barcode : ''}</div>
         <div class="product-actions">
-          <button onclick="beepClick();editProduct('${p.id}')">✎</button>
-          <button onclick="beepClick();deleteProduct('${p.id}')">✕</button>
+          <button onclick="beepClick();editProduct('${p.id}')">✎ แก้ไข</button>
+          <button onclick="beepErr();deleteProduct('${p.id}')" style="background:rgba(255,61,113,0.2);color:var(--accent2)">✕</button>
         </div>
       </div>
     `;
   });
-  document.getElementById('productsList').innerHTML = html || '<p style="text-align:center;color:var(--text-dim);grid-column:1/-1;padding:20px">ยังไม่มีสินค้า</p>';
+  document.getElementById('productsList').innerHTML = html || '<p style="text-align:center;color:var(--text-dim);grid-column:1/-1;padding:20px">ยังไม่มีสินค้า<br>กด ➕ เพิ่มสินค้า</p>';
 }
 
 function openAddProduct() {
@@ -733,6 +980,7 @@ function saveProduct() {
   const price = parseFloat(document.getElementById('inputPrice').value);
   const stock = parseInt(document.getElementById('inputStock').value) || 0;
   const barcode = document.getElementById('inputBarcode').value.trim();
+  const imgFile = document.getElementById('productImage').files[0];
   
   if (!name || isNaN(price) || price < 0) {
     beepErr();
@@ -740,23 +988,31 @@ function saveProduct() {
     return;
   }
   
-  closeProductModal();
-  
-  if (editingProductId) {
-    const idx = products.findIndex(p => p.id === editingProductId);
-    if (idx >= 0) {
-      products[idx] = { ...products[idx], name, price, stock, barcode };
-      toast('✏️ แก้ไขสำเร็จ');
+  const doSave = (imageData) => {
+    closeProductModal();
+    if (editingProductId) {
+      const idx = products.findIndex(p => p.id === editingProductId);
+      if (idx >= 0) {
+        products[idx] = { ...products[idx], name, price, stock, barcode, ...(imageData ? { image: imageData } : {}) };
+        toast('✏️ แก้ไขสำเร็จ');
+        beepOk();
+      }
+    } else {
+      products.push({ id: String(Date.now()), name, price, stock, barcode, image: imageData || null });
+      toast('✅ เพิ่มสำเร็จ');
       beepOk();
     }
+    localStorage.setItem('ss_products', JSON.stringify(products));
+    renderProducts();
+  };
+
+  if (imgFile) {
+    const reader = new FileReader();
+    reader.onload = ev => doSave(ev.target.result);
+    reader.readAsDataURL(imgFile);
   } else {
-    products.push({ id: Date.now(), name, price, stock, barcode });
-    toast('✅ เพิ่มสำเร็จ');
-    beepOk();
+    doSave(null);
   }
-  
-  localStorage.setItem('ss_products', JSON.stringify(products));
-  renderProducts();
 }
 
 function deleteProduct(id) {
@@ -769,22 +1025,44 @@ function deleteProduct(id) {
   }
 }
 
-// QR CODE
-function generateQR() {
-  const text = document.getElementById('accountName').value;
-  if (!text) {
-    document.getElementById('qrDisplay').style.display = 'none';
-    return;
+// QR IMAGE UPLOAD
+let savedQRImageData = localStorage.getItem('ss_qrImage') || null;
+
+function handleQRImageUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    savedQRImageData = ev.target.result;
+    localStorage.setItem('ss_qrImage', savedQRImageData);
+    document.getElementById('qrImagePreview').src = savedQRImageData;
+    document.getElementById('qrDisplay').style.display = 'block';
+    toast('✅ บันทึกรูป QR Code แล้ว');
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearQRImage() {
+  savedQRImageData = null;
+  localStorage.removeItem('ss_qrImage');
+  document.getElementById('qrImagePreview').src = '';
+  document.getElementById('qrDisplay').style.display = 'none';
+  document.getElementById('qrImageInput').value = '';
+  toast('🗑️ ลบรูป QR แล้ว');
+}
+
+function saveAccountName() {
+  const val = document.getElementById('accountName').value;
+  localStorage.setItem('ss_accountName', val);
+}
+
+function loadQRImage() {
+  const saved = localStorage.getItem('ss_qrImage');
+  if (saved) {
+    savedQRImageData = saved;
+    document.getElementById('qrImagePreview').src = saved;
+    document.getElementById('qrDisplay').style.display = 'block';
   }
-  
-  const canvas = document.getElementById('qrCanvas');
-  QRCode.toCanvas(canvas, text, { width: 150 }, err => {
-    if (err) console.error(err);
-    else document.getElementById('qrDisplay').style.display = 'block';
-  });
-  
-  localStorage.setItem('ss_accountName', text);
-  renderCart();
 }
 
 function toggleFeatures() {
@@ -949,6 +1227,7 @@ async function deleteBill(billId) {
 document.addEventListener('touchstart', () => getAudio(), { once: true });
 const saved = localStorage.getItem('ss_accountName');
 if (saved) document.getElementById('accountName').value = saved;
+loadQRImage();
 </script>
 </body>
 </html>
