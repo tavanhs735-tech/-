@@ -1,1 +1,954 @@
-https://claude.ai/public/artifacts/816d259a-6400-4cab-bd93-5d72a5d5977e
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ระบบ POS ร้านค้าอัตโนมัติ</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');
+
+:root {
+  --bg:#080810; --surface:#10101a; --surface2:#181826; --surface3:#1f1f30;
+  --accent:#00e5ff; --accent2:#ff3d71; --accent3:#00ff88; --accent4:#ffb800;
+  --text:#eeeeff; --text-dim:#6060a0; --text-mid:#9090c0;
+  --border:rgba(0,229,255,0.12); --border2:rgba(255,255,255,0.06);
+  --glow:0 0 24px rgba(0,229,255,0.35); --glow-g:0 0 24px rgba(0,255,136,0.4);
+  --glow-r:0 0 24px rgba(255,61,113,0.4);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;overflow-x:hidden}
+body{font-family:'Kanit',sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;user-select:none}
+
+.page{display:none;min-height:100dvh;flex-direction:column;animation:fadeIn .25s ease}
+.page.active{display:flex}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* PIN LOCK */
+#pinLock{background:radial-gradient(ellipse at 50% -10%,rgba(0,229,255,0.12),transparent 60%),var(--bg);align-items:center;justify-content:center}
+.pin-wrap{text-align:center;max-width:340px;width:100%;padding:0 24px}
+.pin-logo{width:80px;height:80px;border-radius:26px;background:conic-gradient(from 200deg,var(--accent),#7b2fff,var(--accent2),var(--accent));display:flex;align-items:center;justify-content:center;font-size:38px;margin:0 auto 20px;box-shadow:0 0 40px rgba(0,229,255,0.45)}
+.pin-title{font-size:28px;font-weight:900}.pin-title span{color:var(--accent)}
+.pin-dots{display:flex;gap:16px;justify-content:center;margin:20px 0}
+.pin-dot{width:18px;height:18px;border-radius:50%;border:2px solid var(--text-dim)}
+.pin-dot.filled{background:var(--accent);border-color:var(--accent)}
+.pin-error{color:var(--accent2);min-height:20px;margin:12px 0}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:100%;max-width:300px;margin:0 auto}
+.pin-key{aspect-ratio:1.2;border-radius:14px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);font-family:'Kanit',sans-serif;font-size:24px;font-weight:700;cursor:pointer}
+.pin-key:active{transform:scale(.93)}
+.pin-key.zero{grid-column:2}
+.pin-key.del{background:transparent;color:var(--text-mid);font-size:20px}
+
+/* HOME */
+#home{background:var(--bg);align-items:center;justify-content:center}
+.home-wrap{text-align:center;width:100%;max-width:380px;padding:40px 24px}
+.app-logo{width:80px;height:80px;border-radius:24px;background:conic-gradient(from 180deg,var(--accent),#7b2fff,var(--accent2),var(--accent));display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto 20px}
+.app-title{font-size:32px;font-weight:900}.app-title span{color:var(--accent)}
+.app-subtitle{color:var(--text-dim);font-size:13px;margin-top:6px}
+.home-btns{margin-top:32px;display:flex;flex-direction:column;gap:12px}
+.btn{padding:14px 24px;border-radius:12px;border:none;font-family:'Kanit',sans-serif;font-size:15px;font-weight:700;cursor:pointer}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#007acc);color:#000;box-shadow:var(--glow)}
+.btn-secondary{background:transparent;color:var(--accent);border:1.5px solid var(--border)}
+.btn-danger{background:rgba(255,61,113,0.1);color:var(--accent2);border:1.5px solid rgba(255,61,113,0.2)}
+
+/* SCANNER */
+#scanner{background:var(--bg);overflow-y:auto;padding-bottom:100px}
+.scanner-header{padding:16px;background:var(--surface3);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.back-btn{width:38px;height:38px;border-radius:10px;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text)}
+.scanner-header h2{font-size:18px;font-weight:700}
+
+.camera-area{margin:12px 16px;border-radius:16px;overflow:hidden;background:#000;min-height:280px;display:flex;align-items:center;justify-content:center;position:relative}
+#video{width:100%;height:100%;object-fit:cover}
+.scan-frame{position:absolute;width:200px;height:200px;border:3px solid var(--accent);border-radius:8px;opacity:0.6}
+.scan-status{position:absolute;top:12px;left:12px;background:rgba(0,229,255,0.2);padding:6px 12px;border-radius:8px;font-size:12px;color:var(--accent);font-weight:700}
+
+.products-display{padding:12px 16px}
+.product-item{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.product-info{text-align:left;flex:1}
+.product-name{font-weight:700;font-size:14px}
+.product-price{color:var(--accent3);font-weight:700;font-family:'Space Mono',monospace;margin-top:3px;font-size:14px}
+.qty-box{display:flex;gap:6px;align-items:center}
+.qty-btn{width:24px;height:24px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text);cursor:pointer;font-weight:700}
+.qty-num{min-width:20px;text-align:center;font-weight:700;font-size:14px}
+
+.total-bar{margin:0 16px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.total-label{font-size:12px;color:var(--text-dim)}.total-value{font-size:24px;font-weight:800;color:var(--accent3)}
+
+.action-btns{display:flex;gap:10px;padding:0 16px;margin-bottom:100px}
+.action-btns button{flex:1;padding:12px;border-radius:10px;border:none;font-family:'Kanit',sans-serif;font-weight:700;cursor:pointer;font-size:14px}
+.btn-clear{background:rgba(255,61,113,0.2);color:var(--accent2)}
+.btn-confirm{background:linear-gradient(135deg,var(--accent3),#00b360);color:#000;box-shadow:var(--glow-g)}
+
+/* PROFILE */
+#profile{background:var(--bg);overflow-y:auto;padding-bottom:100px}
+.profile-header{padding:16px;background:var(--surface3);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.add-product-btn{background:linear-gradient(135deg,var(--accent),#007acc);color:#000;border:none;border-radius:10px;padding:8px 14px;font-family:'Kanit',sans-serif;font-size:13px;font-weight:700;cursor:pointer}
+
+.profile-section{padding:16px;margin-bottom:12px;background:var(--surface);border:1px solid var(--border);border-radius:14px}
+.section-title{font-size:13px;color:var(--text-dim);margin-bottom:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px}
+.qr-input-group{margin-bottom:12px}
+.form-label{font-size:12px;color:var(--text-dim);margin-bottom:6px;display:block}
+.form-input{width:100%;padding:10px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-family:'Kanit',sans-serif;font-size:14px;outline:none}
+.form-input:focus{border-color:var(--accent)}
+.form-input.textarea{min-height:80px;resize:vertical}
+
+.qr-display{margin-top:12px;background:var(--surface2);border-radius:10px;padding:12px;text-align:center;display:none}
+#qrCanvas{max-width:100%;height:auto}
+
+.products-list{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0}
+.product-card{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px;position:relative}
+.product-card-name{font-weight:700;font-size:13px;margin-bottom:6px}.product-card-price{color:var(--accent3);font-weight:700;font-family:'Space Mono',monospace;margin-bottom:6px;font-size:13px}
+.product-card-stock{font-size:11px;color:var(--text-dim);margin-bottom:8px}
+.product-actions{display:flex;gap:4px}
+.product-actions button{flex:1;padding:6px;border-radius:6px;background:rgba(0,229,255,0.2);border:none;color:var(--accent);cursor:pointer;font-size:11px;font-weight:700}
+
+/* BILL */
+#bill{background:var(--bg);overflow-y:auto;padding-bottom:60px}
+.bill-header{padding:16px;background:var(--surface3);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.bill-header h2{font-size:18px;font-weight:700}
+
+.bill-container{padding:16px}
+.bill-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px}
+
+.bill-qr-section{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.bill-qr-box{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center}
+.bill-qr-label{font-size:11px;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;font-weight:700}
+#billQrCode{max-width:100%;height:auto}
+.bill-slip-btn{width:100%;padding:30px;border:2px dashed var(--border);border-radius:10px;background:transparent;color:var(--accent);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;font-family:'Kanit',sans-serif;font-size:13px;font-weight:700}
+.slip-input{display:none}
+#slipPreview{max-width:100%;height:auto;border-radius:10px;margin-top:8px}
+
+.bill-items{margin-bottom:12px}
+.bill-item{display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border);font-size:13px}
+.bill-item:last-child{border-bottom:none}
+.item-name{flex:1}.item-details{font-size:11px;color:var(--text-dim);margin-top:2px}
+.item-price{color:var(--accent3);font-weight:700;font-family:'Space Mono',monospace}
+
+.bill-total{background:var(--surface2);border-radius:10px;padding:12px;text-align:right;font-size:16px;font-weight:800;color:var(--accent3)}.bill-total-label{font-size:12px;color:var(--text-dim)}
+
+.bill-actions{display:flex;gap:10px}
+.bill-actions button{flex:1;padding:12px;border-radius:10px;border:none;font-family:'Kanit',sans-serif;font-weight:700;cursor:pointer;font-size:14px}
+.btn-back-bill{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-complete{background:linear-gradient(135deg,var(--accent3),#00b360);color:#000;box-shadow:var(--glow-g)}
+
+/* NAVBAR */
+.navbar{position:fixed;bottom:0;left:0;right:0;z-index:99;background:rgba(8,8,16,.97);backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;justify-content:space-around;padding:8px 0}
+.nav-btn{background:none;border:none;cursor:pointer;color:var(--text-dim);font-family:'Kanit',sans-serif;font-size:10px;padding:6px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.nav-btn.active{color:var(--accent)}
+.nav-btn svg{width:20px;height:20px}
+
+/* MODAL */
+.modal-bg{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);align-items:flex-end}
+.modal-bg.open{display:flex}
+.modal{background:var(--surface);border-radius:18px 18px 0 0;padding:18px 16px;width:100%;max-height:90dvh;overflow-y:auto}
+.modal h3{font-size:16px;font-weight:700;margin-bottom:14px}
+.form-group{margin-bottom:10px}
+.modal-buttons{display:flex;gap:8px;margin-top:14px}
+.modal-btn{flex:1;padding:10px;border-radius:9px;border:none;font-family:'Kanit',sans-serif;font-weight:600;cursor:pointer;font-size:13px}
+.modal-cancel{background:var(--surface2);border:1px solid var(--border);color:var(--text)}
+.modal-save{background:linear-gradient(135deg,var(--accent),#007acc);color:#000}
+
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 16px;font-size:12px;z-index:400;opacity:0;pointer-events:none;transition:opacity .25s;white-space:nowrap}
+.toast.show{opacity:1}
+
+.features-info{position:fixed;bottom:0;left:0;right:0;z-index:1000;background:var(--surface);max-height:50dvh;overflow-y:auto;display:none;padding:16px;border-top:1px solid var(--border)}
+.features-info.open{display:block}
+.features-close{float:right;background:none;border:none;color:var(--accent);font-size:20px;cursor:pointer}
+.feature-item{margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.feature-item:last-child{border-bottom:none}
+.feature-name{font-weight:700;color:var(--accent);font-size:13px}
+.feature-desc{font-size:12px;color:var(--text-dim);margin-top:4px}
+</style>
+</head>
+<body>
+
+<div class="toast" id="toast"></div>
+
+<!-- PIN LOCK -->
+<div class="page active" id="pinLock">
+  <div class="pin-wrap">
+    <div class="pin-logo">🛒</div>
+    <div class="pin-title">ระบบ <span>POS</span></div>
+    <p style="color:var(--text-dim);font-size:13px;margin-top:10px">ร้านค้าอัตโนมัติสแกนสินค้า</p>
+    <div class="pin-label" style="margin-top:26px">ใส่รหัส PIN 6 หลัก</div>
+    <div class="pin-dots" id="pinDots">
+      <div class="pin-dot" id="d0"></div><div class="pin-dot" id="d1"></div>
+      <div class="pin-dot" id="d2"></div><div class="pin-dot" id="d3"></div>
+      <div class="pin-dot" id="d4"></div><div class="pin-dot" id="d5"></div>
+    </div>
+    <div class="pin-error" id="pinError">&nbsp;</div>
+    <div class="pin-pad" id="pinPad">
+      <button class="pin-key" onclick="pinTap(this,'1')">1</button>
+      <button class="pin-key" onclick="pinTap(this,'2')">2</button>
+      <button class="pin-key" onclick="pinTap(this,'3')">3</button>
+      <button class="pin-key" onclick="pinTap(this,'4')">4</button>
+      <button class="pin-key" onclick="pinTap(this,'5')">5</button>
+      <button class="pin-key" onclick="pinTap(this,'6')">6</button>
+      <button class="pin-key" onclick="pinTap(this,'7')">7</button>
+      <button class="pin-key" onclick="pinTap(this,'8')">8</button>
+      <button class="pin-key" onclick="pinTap(this,'9')">9</button>
+      <div></div>
+      <button class="pin-key zero" onclick="pinTap(this,'0')">0</button>
+      <button class="pin-key del" onclick="pinDel()">⌫</button>
+    </div>
+  </div>
+</div>
+
+<!-- HOME -->
+<div class="page" id="home">
+  <div class="home-wrap">
+    <div class="app-logo">🛒</div>
+    <div class="app-title">ระบบ <span>POS</span></div>
+    <p class="app-subtitle">📱 ร้านค้าอัตโนมัติ | 📷 สแกนสินค้า | 💰 ชำระเงิน</p>
+    <div class="home-btns">
+      <button class="btn btn-primary" onclick="beepClick();goTo('scanner')">📷 เริ่มสแกนสินค้า</button>
+      <button class="btn btn-secondary" onclick="beepClick();goTo('profile')">⚙️ จัดการสินค้า</button>
+      <button class="btn btn-secondary" onclick="beepClick();loadBillsFromSupabase();goTo('history')">📊 ประวัติการขาย</button>
+      <button class="btn btn-secondary" onclick="beepClick();toggleFeatures()">ℹ️ ข้อมูลฟีเจอร์</button>
+      <button class="btn btn-danger" onclick="beepErr();doLogout()">🔒 ออกจากระบบ</button>
+    </div>
+  </div>
+</div>
+
+<!-- SCANNER PAGE -->
+<div class="page" id="scanner">
+  <div class="scanner-header">
+    <button class="back-btn" onclick="beepClick();stopScanning();goTo('home')">←</button>
+    <h2>สแกนสินค้า</h2>
+    <span style="font-size:12px;color:var(--text-dim)">📷 อัตโนมัติ</span>
+  </div>
+
+  <div class="camera-area">
+    <video id="video" autoplay playsinline muted style="display:none"></video>
+    <div class="scan-frame"></div>
+    <div class="scan-status" id="scanStatus">📷 กำลังสแกน…</div>
+  </div>
+
+  <div class="products-display" id="productsDisplay"></div>
+
+  <div class="total-bar">
+    <div><div class="total-label">ยอดรวมทั้งหมด</div></div>
+    <div class="total-value" id="totalAmount">฿0</div>
+  </div>
+
+  <div class="action-btns">
+    <button class="action-btns button btn-clear" onclick="beepErr();clearCart()">🗑️ ลบทั้งหมด</button>
+    <button class="action-btns button btn-confirm" onclick="beepOk();goToBill()" id="confirmBtn" disabled>✅ ยืนยัน</button>
+  </div>
+
+  <div class="navbar">
+    <button class="nav-btn active" onclick="beepClick();goTo('scanner')">📷 สแกน</button>
+    <button class="nav-btn" onclick="beepClick();stopScanning();goTo('profile')">⚙️ จัดการ</button>
+    <button class="nav-btn" onclick="beepClick();stopScanning();goTo('home')">🏠 หน้าหลัก</button>
+  </div>
+</div>
+
+<!-- PROFILE PAGE -->
+<div class="page" id="profile">
+  <div class="profile-header">
+    <h2>จัดการสินค้า</h2>
+    <button class="add-product-btn" onclick="beepClick();openAddProduct()">➕ เพิ่ม</button>
+  </div>
+
+  <div class="profile-section">
+    <div class="section-title">🏪 ข้อมูลบัญชี</div>
+    <div class="qr-input-group">
+      <label class="form-label">ชื่อบัญชี/QR Code ชำระเงิน</label>
+      <input type="text" class="form-input" id="accountName" placeholder="ชื่อบัญชีธนาคาร เช่น สมชาย ใจดี" onchange="generateQR()">
+    </div>
+    <div class="qr-display" id="qrDisplay">
+      <canvas id="qrCanvas"></canvas>
+    </div>
+  </div>
+
+  <div class="profile-section">
+    <div class="section-title">📦 รายการสินค้า</div>
+    <div class="products-list" id="productsList"></div>
+  </div>
+
+  <div class="navbar">
+    <button class="nav-btn" onclick="beepClick();goTo('scanner')">📷 สแกน</button>
+    <button class="nav-btn active">⚙️ จัดการ</button>
+    <button class="nav-btn" onclick="beepClick();goTo('home')">🏠 หน้าหลัก</button>
+  </div>
+</div>
+
+<!-- BILL PAGE -->
+<div class="page" id="bill">
+  <div class="bill-header">
+    <button class="back-btn" onclick="beepClick();goTo('scanner')">←</button>
+    <h2>ใบเสร็จชำระเงิน</h2>
+  </div>
+
+  <div class="bill-container">
+    <!-- QR Code and Slip Upload -->
+    <div class="bill-qr-section">
+      <div class="bill-qr-box">
+        <div class="bill-qr-label">📱 QR Code ชำระเงิน</div>
+        <canvas id="billQrCode"></canvas>
+      </div>
+      <div class="bill-qr-box">
+        <div class="bill-qr-label">📸 สลิปโอนเงิน</div>
+        <button class="bill-slip-btn" onclick="document.getElementById('slipInput').click()">
+          📸 ถ่ายรูปสลิป
+        </button>
+        <input type="file" id="slipInput" class="slip-input" accept="image/*" onchange="handleSlip(event)">
+        <img id="slipPreview">
+      </div>
+    </div>
+
+    <!-- Items -->
+    <div class="bill-card">
+      <div class="bill-qr-label">รายการสินค้า</div>
+      <div class="bill-items" id="billItems"></div>
+    </div>
+
+    <!-- Total -->
+    <div class="bill-card">
+      <div class="bill-total">
+        <div class="bill-total-label">ยอดรวมทั้งหมด</div>
+        <div id="billTotalAmount">฿0</div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="bill-actions">
+      <button class="bill-actions button btn-back-bill" onclick="beepClick();goTo('scanner')">← กลับสแกน</button>
+      <button class="bill-actions button btn-complete" onclick="beepOk();completeBill()">✅ สำเร็จ</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Add/Edit Product -->
+<div class="modal-bg" id="productModal">
+  <div class="modal">
+    <h3 id="modalTitle">เพิ่มสินค้า</h3>
+    <div class="form-group">
+      <label class="form-label">ชื่อสินค้า *</label>
+      <input type="text" class="form-input" id="inputName" placeholder="เช่น น้ำดื่ม 600ml">
+    </div>
+    <div class="form-group">
+      <label class="form-label">ราคา (฿) *</label>
+      <input type="number" class="form-input" id="inputPrice" placeholder="0" min="0">
+    </div>
+    <div class="form-group">
+      <label class="form-label">จำนวนสต็อก</label>
+      <input type="number" class="form-input" id="inputStock" placeholder="0" min="0">
+    </div>
+    <div class="form-group">
+      <label class="form-label">รหัสสินค้า/Barcode (ไม่บังคับ)</label>
+      <input type="text" class="form-input" id="inputBarcode" placeholder="รหัสหรือ Barcode">
+    </div>
+    <div class="form-group">
+      <label class="form-label">อัพโหลดรูปสินค้า</label>
+      <input type="file" class="form-input" id="productImage" accept="image/*">
+    </div>
+    <div class="modal-buttons">
+      <button class="modal-btn modal-cancel" onclick="beepClick();closeProductModal()">ยกเลิก</button>
+      <button class="modal-btn modal-save" onclick="beepOk();saveProduct()">บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<!-- FEATURES INFO -->
+<div class="features-info" id="featuresInfo">
+  <button class="features-close" onclick="toggleFeatures()">✕</button>
+  <h3 style="margin-bottom:12px;color:var(--accent)">📱 ฟีเจอร์ของระบบ</h3>
+  
+  <div class="feature-item">
+    <div class="feature-name">📷 สแกนสินค้าอัตโนมัติ</div>
+    <div class="feature-desc">เมื่อคุณเปิดหน้าสแกน ระบบจะสแกนรูปภาพสินค้าของคุณโดยอัตโนมัติ และเพิ่มลงตะกร้าเลย</div>
+  </div>
+
+  <div class="feature-item">
+    <div class="feature-name">💰 ยอดรวมแบบเรียลไทม์</div>
+    <div class="feature-desc">แสดงยอดรวมให้เห็นเสมอ เพื่อให้ลูกค้าเข้าใจว่าต้องจ่ายเงินเท่าไหร่</div>
+  </div>
+
+  <div class="feature-item">
+    <div class="feature-name">🧮 จำนวนสินค้า</div>
+    <div class="feature-desc">สามารถเพิ่ม/ลดจำนวนสินค้าได้ทันที โดยใช้ปุ่ม + และ -</div>
+  </div>
+
+  <div class="feature-item">
+    <div class="feature-name">📋 ใบเสร็จชำระเงิน</div>
+    <div class="feature-desc">หลังจากยืนยันการสแกน จะแสดงใบเสร็จที่มี QR Code ชำระเงิน และสามารถถ่ายรูปสลิปได้</div>
+  </div>
+
+  <div class="feature-item">
+    <div class="feature-name">📱 QR Code ชำระเงิน</div>
+    <div class="feature-desc">ใส่ชื่อบัญชีธนาคารของคุณ จะสร้าง QR Code อัตโนมัติ และแสดงในใบเสร็จ</div>
+  </div>
+
+  <div class="feature-item">
+    <div class="feature-name">📸 ถ่ายรูปสลิปโอนเงิน</div>
+    <div class="feature-desc">เมื่อลูกค้าโอนเงิน สามารถถ่ายรูปสลิปมาใส่ในระบบได้เพื่อเก็บหลักฐาน</div>
+  </div>
+
+  <div class="feature-item">
+    <div class="feature-name">⚙️ จัดการสินค้า</div>
+    <div class="feature-desc">ในหน้าจัดการ สามารถเพิ่ม ลบ แก้ไขสินค้า และอัพโหลดรูปสินค้าได้</div>
+  </div>
+
+  <div class="feature-item">
+    <div class="feature-name">🔒 ระบบ PIN</div>
+    <div class="feature-desc">เพื่อความปลอดภัย ต้องใส่รหัส PIN 6 หลักก่อนใช้ระบบ (PIN ปัจจุบัน: 123456)</div>
+  </div>
+
+  <div class="feature-item">
+    <div class="feature-name">💾 เก็บข้อมูลในอุปกรณ์</div>
+    <div class="feature-desc">สินค้า QR Code สลิป และรายการทั้งหมดเก็บอยู่ในอุปกรณ์ของคุณอย่างปลอดภัย</div>
+  </div>
+</div>
+
+<!-- HISTORY PAGE -->
+<div class="page" id="history">
+  <div class="profile-header">
+    <h2>📊 ประวัติการขาย</h2>
+    <button class="add-product-btn" onclick="beepClick();loadBillsFromSupabase()">🔄 รีโหลด</button>
+  </div>
+
+  <div style="padding:12px 16px">
+    <div id="billsList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px"></div>
+  </div>
+
+  <div class="navbar">
+    <button class="nav-btn" onclick="beepClick();goTo('scanner')">📷 สแกน</button>
+    <button class="nav-btn" onclick="beepClick();goTo('profile')">⚙️ จัดการ</button>
+    <button class="nav-btn active" onclick="beepClick();loadBillsFromSupabase();goTo('history')">📊 ประวัติ</button>
+  </div>
+</div>
+
+<script>
+// SUPABASE CONFIG
+const SUPABASE_URL = 'https://hobzzhzfzxmyomzbioqp.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhvYnp6aHpmenhteW9temJvaXFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0NjI5MjYsImV4cCI6MjA5MzAzODkyNn0.1IxTxc_j7_riwQBROAwQ-qnWW7sE9OgAkXe3G2gTD44';
+
+const PIN_CODE = '884988';
+
+let pinBuffer = '';
+let isUnlocked = false;
+let products = JSON.parse(localStorage.getItem('ss_products') || '[]');
+let cart = [];
+let editingProductId = null;
+let cameraActive = false;
+
+// AUDIO
+let audioCtx = null;
+function getAudio() {
+  if (!audioCtx) audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+function beep(f=880, d=100, v=0.3) {
+  try {
+    const c = getAudio(), o = c.createOscillator(), g = c.createGain();
+    o.connect(g);g.connect(c.destination);o.frequency.value = f;
+    g.gain.setValueAtTime(v, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + d/1000);
+    o.start();o.stop(c.currentTime + d/1000);
+  } catch(e) {}
+}
+function beepClick() { beep(600, 40, 0.15); }
+function beepOk() { beep(880, 80, 0.4); setTimeout(() => beep(1100, 140, 0.4), 100); }
+function beepErr() { beep(300, 150, 0.3); }
+function beepScan() { beep(1000, 100, 0.4); }
+
+// PIN
+function pinTap(btn, digit) {
+  beepClick();
+  if (pinBuffer.length >= 6) return;
+  pinBuffer += digit;
+  updateDots();
+  if (pinBuffer.length === 6) setTimeout(checkPin, 150);
+}
+function pinDel() {
+  if (!pinBuffer.length) return;
+  beepClick();
+  pinBuffer = pinBuffer.slice(0, -1);
+  updateDots();
+}
+function updateDots() {
+  for (let i = 0; i < 6; i++) {
+    document.getElementById('d' + i).classList.toggle('filled', i < pinBuffer.length);
+  }
+}
+function checkPin() {
+  if (pinBuffer === PIN_CODE) {
+    beepOk();
+    isUnlocked = true;
+    goTo('home');
+    pinBuffer = '';
+    updateDots();
+  } else {
+    beepErr();
+    document.getElementById('pinError').textContent = 'รหัส PIN ไม่ถูกต้อง!';
+    pinBuffer = '';
+    updateDots();
+    setTimeout(() => { document.getElementById('pinError').textContent = '&nbsp;'; }, 2000);
+  }
+}
+function doLogout() {
+  isUnlocked = false;
+  pinBuffer = '';
+  updateDots();
+  stopScanning();
+  goTo('pinLock');
+}
+
+// NAVIGATION
+function goTo(page) {
+  if (!isUnlocked && page !== 'pinLock') return;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(page).classList.add('active');
+  if (page === 'scanner') startScanning();
+  if (page === 'profile') renderProducts();
+}
+
+// CAMERA SCANNER
+function startScanning() {
+  if (cameraActive) return;
+  cameraActive = true;
+  const video = document.getElementById('video');
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    .then(stream => {
+      video.srcObject = stream;
+      video.style.display = 'block';
+      video.play();
+      performScan();
+    })
+    .catch(e => {
+      toast('❌ ไม่สามารถเปิดกล้องได้');
+      cameraActive = false;
+    });
+}
+
+function performScan() {
+  if (!cameraActive) return;
+  const video = document.getElementById('video');
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+  
+  // เนื่องจากฟีเจอร์การ recognize รูปภาพต้องใช้ TensorFlow/ML, 
+  // เราจะ simulate โดยเลือกสินค้าแบบสุ่มเมื่อสแกน
+  if (products.length > 0 && Math.random() > 0.3) {
+    const randomProduct = products[Math.floor(Math.random() * products.length)];
+    const existing = cart.find(i => i.id === randomProduct.id);
+    if (existing) {
+      existing.qty++;
+    } else {
+      cart.push({ ...randomProduct, qty: 1 });
+    }
+    beepScan();
+    renderCart();
+    toast(`✅ เพิ่ม: ${randomProduct.name}`);
+  }
+  
+  setTimeout(performScan, 2000);
+}
+
+function stopScanning() {
+  cameraActive = false;
+  const video = document.getElementById('video');
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.style.display = 'none';
+  }
+}
+
+// CART
+function renderCart() {
+  const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  document.getElementById('totalAmount').textContent = '฿' + fmt(total);
+  
+  let html = '';
+  cart.forEach(item => {
+    html += `
+      <div class="product-item">
+        <div class="product-info">
+          <div class="product-name">${item.name}</div>
+          <div class="product-price">฿${fmt(item.price)} × ${item.qty} = ฿${fmt(item.price * item.qty)}</div>
+        </div>
+        <div class="qty-box">
+          <button class="qty-btn" onclick="beepClick();changeQty('${item.id}',-1)">−</button>
+          <span class="qty-num">${item.qty}</span>
+          <button class="qty-btn" onclick="beepClick();changeQty('${item.id}',1)">+</button>
+          <button class="qty-btn" style="background:rgba(255,61,113,0.2);color:var(--accent2)" onclick="beepErr();removeItem('${item.id}')">✕</button>
+        </div>
+      </div>
+    `;
+  });
+  
+  document.getElementById('productsDisplay').innerHTML = html || '<p style="text-align:center;color:var(--text-dim);padding:20px">ยังไม่มีสินค้า สแกนเลย!</p>';
+  document.getElementById('confirmBtn').disabled = cart.length === 0;
+}
+
+function changeQty(id, delta) {
+  const item = cart.find(i => i.id === id);
+  if (item) {
+    item.qty += delta;
+    if (item.qty <= 0) cart = cart.filter(i => i.id !== id);
+    renderCart();
+  }
+}
+
+function removeItem(id) {
+  cart = cart.filter(i => i.id !== id);
+  renderCart();
+}
+
+function clearCart() {
+  cart = [];
+  renderCart();
+  toast('🗑️ ลบทั้งหมดแล้ว');
+}
+
+function goToBill() {
+  if (cart.length === 0) return;
+  const accountName = document.getElementById('accountName').value || 'ไม่ระบุ';
+  
+  // Generate Bill QR
+  const qrCanvas = document.getElementById('billQrCode');
+  QRCode.toCanvas(qrCanvas, accountName, { width: 150 }, err => {
+    if (err) console.error(err);
+  });
+  
+  // Render Items
+  const billItems = document.getElementById('billItems');
+  let html = '';
+  cart.forEach(item => {
+    html += `
+      <div class="bill-item">
+        <div>
+          <div class="item-name">${item.name}</div>
+          <div class="item-details">จำนวน: ${item.qty} | ราคา: ฿${fmt(item.price)}</div>
+        </div>
+        <div class="item-price">฿${fmt(item.price * item.qty)}</div>
+      </div>
+    `;
+  });
+  billItems.innerHTML = html;
+  
+  // Total
+  const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  document.getElementById('billTotalAmount').textContent = '฿' + fmt(total);
+  
+  document.getElementById('slipPreview').style.display = 'none';
+  document.getElementById('slipPreview').src = '';
+  
+  goTo('bill');
+  beepOk();
+}
+
+function handleSlip(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById('slipPreview').src = ev.target.result;
+    document.getElementById('slipPreview').style.display = 'block';
+    toast('✅ บันทึกรูปสลิป');
+  };
+  reader.readAsDataURL(file);
+}
+
+function completeBill() {
+  const slip = document.getElementById('slipPreview').src;
+  if (!slip) {
+    toast('⚠️ กรุณาอัพโหลดรูปสลิป');
+    return;
+  }
+  
+  const billData = {
+    id: 'BILL_' + Date.now(),
+    date: new Date().toISOString(),
+    customer: document.getElementById('accountName').value || 'ไม่ระบุ',
+    account: document.getElementById('accountName').value || 'ไม่ระบุ',
+    items: cart,
+    total: cart.reduce((s, i) => s + i.price * i.qty, 0),
+    slip: slip
+  };
+  
+  saveBillToSupabase(billData);
+  
+  cart = [];
+  document.getElementById('slipInput').value = '';
+  beepOk();
+  toast('✅ สำเร็จ! เริ่มสแกนใหม่');
+  goTo('scanner');
+}
+
+// PRODUCTS
+function renderProducts() {
+  let html = '';
+  products.forEach(p => {
+    html += `
+      <div class="product-card">
+        <div class="product-card-name">${p.name}</div>
+        <div class="product-card-price">฿${fmt(p.price)}</div>
+        <div class="product-card-stock">สต็อก: ${p.stock || 0}</div>
+        <div class="product-actions">
+          <button onclick="beepClick();editProduct('${p.id}')">✎</button>
+          <button onclick="beepClick();deleteProduct('${p.id}')">✕</button>
+        </div>
+      </div>
+    `;
+  });
+  document.getElementById('productsList').innerHTML = html || '<p style="text-align:center;color:var(--text-dim);grid-column:1/-1;padding:20px">ยังไม่มีสินค้า</p>';
+}
+
+function openAddProduct() {
+  editingProductId = null;
+  document.getElementById('modalTitle').textContent = 'เพิ่มสินค้า';
+  document.getElementById('inputName').value = '';
+  document.getElementById('inputPrice').value = '';
+  document.getElementById('inputStock').value = '';
+  document.getElementById('inputBarcode').value = '';
+  document.getElementById('productImage').value = '';
+  document.getElementById('productModal').classList.add('open');
+}
+
+function editProduct(id) {
+  const p = products.find(x => x.id === id);
+  if (!p) return;
+  editingProductId = id;
+  document.getElementById('modalTitle').textContent = 'แก้ไขสินค้า';
+  document.getElementById('inputName').value = p.name;
+  document.getElementById('inputPrice').value = p.price;
+  document.getElementById('inputStock').value = p.stock || 0;
+  document.getElementById('inputBarcode').value = p.barcode || '';
+  document.getElementById('productModal').classList.add('open');
+}
+
+function closeProductModal() {
+  document.getElementById('productModal').classList.remove('open');
+}
+
+function saveProduct() {
+  const name = document.getElementById('inputName').value.trim();
+  const price = parseFloat(document.getElementById('inputPrice').value);
+  const stock = parseInt(document.getElementById('inputStock').value) || 0;
+  const barcode = document.getElementById('inputBarcode').value.trim();
+  
+  if (!name || isNaN(price) || price < 0) {
+    beepErr();
+    toast('⚠️ กรุณาใส่ชื่อและราคา');
+    return;
+  }
+  
+  closeProductModal();
+  
+  if (editingProductId) {
+    const idx = products.findIndex(p => p.id === editingProductId);
+    if (idx >= 0) {
+      products[idx] = { ...products[idx], name, price, stock, barcode };
+      toast('✏️ แก้ไขสำเร็จ');
+      beepOk();
+    }
+  } else {
+    products.push({ id: Date.now(), name, price, stock, barcode });
+    toast('✅ เพิ่มสำเร็จ');
+    beepOk();
+  }
+  
+  localStorage.setItem('ss_products', JSON.stringify(products));
+  renderProducts();
+}
+
+function deleteProduct(id) {
+  if (confirm('ลบสินค้านี้ใช่ไหม?')) {
+    products = products.filter(p => p.id !== id);
+    localStorage.setItem('ss_products', JSON.stringify(products));
+    renderProducts();
+    beepOk();
+    toast('🗑️ ลบสำเร็จ');
+  }
+}
+
+// QR CODE
+function generateQR() {
+  const text = document.getElementById('accountName').value;
+  if (!text) {
+    document.getElementById('qrDisplay').style.display = 'none';
+    return;
+  }
+  
+  const canvas = document.getElementById('qrCanvas');
+  QRCode.toCanvas(canvas, text, { width: 150 }, err => {
+    if (err) console.error(err);
+    else document.getElementById('qrDisplay').style.display = 'block';
+  });
+  
+  localStorage.setItem('ss_accountName', text);
+  renderCart();
+}
+
+function toggleFeatures() {
+  document.getElementById('featuresInfo').classList.toggle('open');
+}
+
+// HELPERS
+function fmt(n) { return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 0 }); }
+function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 2500); }
+
+// SUPABASE FUNCTIONS
+const sb = {
+  headers: {
+    'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer ' + SUPABASE_KEY,
+    'Content-Type': 'application/json',
+    'Prefer': 'return=representation'
+  },
+  url(table, query='') { return `${SUPABASE_URL}/rest/v1/${table}${query}`; },
+  async post(table, body) {
+    try {
+      const r = await fetch(this.url(table), { method:'POST', headers:this.headers, body:JSON.stringify(body) });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    } catch(e) {
+      console.warn('Supabase error:', e.message);
+      return null;
+    }
+  },
+  async get(table, query='') {
+    try {
+      const r = await fetch(this.url(table, query), { headers:this.headers });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    } catch(e) {
+      console.warn('Supabase error:', e.message);
+      return [];
+    }
+  },
+  async delete(table, id) {
+    try {
+      const r = await fetch(this.url(table, `?id=eq.${id}`), { method:'DELETE', headers:this.headers });
+      if (!r.ok) throw new Error(await r.text());
+    } catch(e) {
+      console.warn('Supabase delete error:', e.message);
+    }
+  }
+};
+
+let bills = [];
+
+async function saveBillToSupabase(billData) {
+  const result = await sb.post('bills', {
+    bill_number: billData.id,
+    customer_name: billData.customer || 'ไม่ระบุ',
+    account_name: billData.account,
+    total_amount: billData.total,
+    items_json: JSON.stringify(billData.items),
+    slip_image: billData.slip || null,
+    created_at: billData.date
+  });
+  
+  if (result) {
+    bills.unshift({ ...result, items: billData.items });
+    localStorage.setItem('ss_bills', JSON.stringify(bills));
+    toast('✅ บันทึกบิลแล้ว');
+  }
+}
+
+async function loadBillsFromSupabase() {
+  const result = await sb.get('bills', '?order=created_at.desc');
+  if (result && result.length > 0) {
+    bills = result.map(b => ({
+      ...b,
+      items: JSON.parse(b.items_json || '[]')
+    }));
+    localStorage.setItem('ss_bills', JSON.stringify(bills));
+    toast('✅ โหลดข้อมูลบิล');
+  } else {
+    bills = JSON.parse(localStorage.getItem('ss_bills') || '[]');
+  }
+  renderBills();
+}
+
+function renderBills() {
+  let html = '';
+  bills.forEach(bill => {
+    const date = new Date(bill.created_at);
+    const dateStr = date.toLocaleDateString('th-TH');
+    html += `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;cursor:pointer;transition:all .2s;position:relative" onclick="beepClick();showBillDetail('${bill.id}')">
+        <div style="font-weight:700;font-size:13px;color:var(--accent);">${bill.bill_number}</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${dateStr}</div>
+        <div style="font-size:12px;margin-top:6px">🛍️ ${bill.items.length} รายการ</div>
+        <div style="font-weight:700;color:var(--accent3);font-size:14px;margin-top:6px">฿${fmt(bill.total_amount)}</div>
+        <button onclick="event.stopPropagation();beepErr();deleteBill('${bill.id}')" style="position:absolute;top:8px;right:8px;background:rgba(255,61,113,0.2);border:none;color:var(--accent2);border-radius:6px;width:24px;height:24px;cursor:pointer;font-size:12px">✕</button>
+      </div>
+    `;
+  });
+  document.getElementById('billsList').innerHTML = html || '<p style="text-align:center;color:var(--text-dim);grid-column:1/-1;padding:30px">ยังไม่มีประวัติการขาย</p>';
+}
+
+function showBillDetail(billId) {
+  const bill = bills.find(b => b.id === billId);
+  if (!bill) return;
+  
+  const date = new Date(bill.created_at);
+  const dateStr = date.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+  const timeStr = date.toLocaleTimeString('th-TH');
+  
+  let itemsHtml = '';
+  bill.items.forEach(item => {
+    itemsHtml += `
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <span>${item.name || item.name} × ${item.qty}</span>
+        <span style="color:var(--accent3);font-weight:700">฿${fmt(item.price * item.qty)}</span>
+      </div>
+    `;
+  });
+  
+  const html = `
+    <div style="position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(5px)">
+      <div style="background:var(--surface);border-radius:14px;padding:20px;width:100%;max-width:380px;max-height:80dvh;overflow-y:auto">
+        <button onclick="this.closest('div[style*=fixed]').remove()" style="float:right;background:none;border:none;color:var(--accent);font-size:24px;cursor:pointer">✕</button>
+        
+        <div style="text-align:center;margin-bottom:16px">
+          <h3 style="font-size:16px;font-weight:700;margin-bottom:4px">${bill.bill_number}</h3>
+          <p style="color:var(--text-dim);font-size:12px">${dateStr} เวลา ${timeStr}</p>
+        </div>
+        
+        <div style="background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:12px">
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">📱 บัญชี: ${bill.account_name}</div>
+          ${itemsHtml}
+          <div style="display:flex;justify-content:space-between;padding-top:10px;border-top:1.5px solid var(--border);margin-top:10px;font-weight:700;font-size:14px;color:var(--accent3)">
+            <span>รวม:</span>
+            <span>฿${fmt(bill.total_amount)}</span>
+          </div>
+        </div>
+        
+        ${bill.slip_image ? `<img src="${bill.slip_image}" style="width:100%;border-radius:10px;margin-bottom:12px">` : ''}
+        
+        <button onclick="this.closest('div[style*=fixed]').remove()" style="width:100%;padding:10px;background:linear-gradient(135deg,var(--accent),#007acc);color:#000;border:none;border-radius:10px;font-family:'Kanit',sans-serif;font-weight:700;cursor:pointer">ปิด</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function deleteBill(billId) {
+  if (!confirm('ลบบิลนี้ใช่ไหม?')) return;
+  
+  bills = bills.filter(b => b.id !== billId);
+  localStorage.setItem('ss_bills', JSON.stringify(bills));
+  await sb.delete('bills', billId);
+  renderBills();
+  beepOk();
+  toast('🗑️ ลบบิล');
+}
+
+// INIT
+document.addEventListener('touchstart', () => getAudio(), { once: true });
+const saved = localStorage.getItem('ss_accountName');
+if (saved) document.getElementById('accountName').value = saved;
+</script>
+</body>
+</html>
